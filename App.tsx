@@ -454,16 +454,19 @@ const App: React.FC = () => {
   const resolvePvpGame = (room: PvpRoom, isHost: boolean) => {
       const didHostWin = room.result === room.selectedSide;
       const didIWin = isHost ? didHostWin : !didHostWin;
-      const totalPot = room.betAmount * 2;
-      const rake = totalPot * 0.10; 
       
-      // Add rake to global bank
-      firebaseService.updateHouseBank(rake);
+      // FIX: Rake is 0.1 of the BET amount (Difference between 2.0x Pot and 1.9x Payout)
+      const rake = room.betAmount * 0.1; 
+      
+      // FIX: Only Host updates the bank to avoid double counting from both clients
+      if (isHost) {
+        firebaseService.updateHouseBank(rake);
+      }
 
       let newPlayer = { ...player };
 
       if (didIWin) {
-          const winAmount = (room.betAmount * 2) * 0.95; 
+          const winAmount = room.betAmount * 1.9; 
           newPlayer.balance += winAmount;
           newPlayer.stats.totalWins += 1;
           newPlayer.stats.currentWinStreak += 1;
