@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Tab,
@@ -35,14 +34,8 @@ const GameIcon = ({ active }: { active: boolean }) => (
 const MultiIcon = ({ active }: { active: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
 );
-const LeaderIcon = ({ active }: { active: boolean }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
-);
 const ChatIcon = ({ active }: { active: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2-2z"/></svg>
-);
-const HistoryIcon = ({ active }: { active: boolean }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/></svg>
 );
 const ProfileIcon = ({ active }: { active: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -146,10 +139,6 @@ const SplashScreen = ({ onFinish }: { onFinish: () => void }) => {
           </h1>
           <p className="text-blue-200/60 text-xs tracking-[0.3em] uppercase font-bold">Casino Royale</p>
        </div>
-       <div className="absolute bottom-12 flex flex-col items-center">
-          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-3"></div>
-          <span className="text-[10px] text-slate-600 uppercase tracking-widest font-mono">Loading assets...</span>
-       </div>
     </div>
   );
 };
@@ -196,6 +185,10 @@ const App: React.FC = () => {
   const [leaders, setLeaders] = useState<Leader[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  const handleGlobalClick = () => {
+    soundManager.unlockAudio();
+  };
+
   // --- Init ---
   useEffect(() => {
     soundManager.loadAll();
@@ -212,14 +205,11 @@ const App: React.FC = () => {
            avatarSeed: tgUser.id.toString()
         }));
       }
-      // Swipe handling...
     }
     
-    // Load Local Data
     try {
       const savedPlayer = localStorage.getItem('flipcity_player');
       const savedBank = localStorage.getItem('flipcity_bank');
-      const savedHistory = localStorage.getItem('flipcity_history');
       const savedSettings = localStorage.getItem('flipcity_settings');
 
       if (savedPlayer) {
@@ -228,7 +218,6 @@ const App: React.FC = () => {
          setPlayer(p);
       }
       if (savedBank) setHouseBank(parseFloat(savedBank));
-      if (savedHistory) setHistory(JSON.parse(savedHistory));
       if (savedSettings) {
          const s = JSON.parse(savedSettings);
          setSoundEnabled(s.soundEnabled ?? true);
@@ -236,7 +225,7 @@ const App: React.FC = () => {
       }
     } catch (e) { console.error(e); }
 
-    // Init Chat Listener (Real or Fake)
+    // Init Chat Listener
     if (firebaseService.isOnline) {
         const chatRef = firebaseService.getChatRef();
         if (chatRef) {
@@ -250,13 +239,13 @@ const App: React.FC = () => {
                         avatar: data[key].avatar,
                         isSystem: false
                     }));
-                    setChatMessages(msgs.slice(-50)); // Keep last 50
+                    setChatMessages(msgs.slice(-50));
                     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
                 }
             });
         }
     } else {
-        setChatMessages([{id: '0', sender: 'System', text: 'Оффлайн режим. Настройте Firebase для чата!', isSystem: true}]);
+        setChatMessages([{id: '0', sender: 'System', text: 'Оффлайн режим. Настройте Firebase!', isSystem: true}]);
     }
     
     setIsLoaded(true);
@@ -266,37 +255,21 @@ const App: React.FC = () => {
     if (!isLoaded) return;
     localStorage.setItem('flipcity_player', JSON.stringify(player));
     localStorage.setItem('flipcity_bank', houseBank.toString());
-    localStorage.setItem('flipcity_history', JSON.stringify(history));
     localStorage.setItem('flipcity_settings', JSON.stringify({ volume, soundEnabled }));
-  }, [player, houseBank, history, volume, soundEnabled, isLoaded]);
+  }, [player, houseBank, volume, soundEnabled, isLoaded]);
 
   useEffect(() => { soundManager.setVolume(soundEnabled ? volume : 0); }, [volume, soundEnabled]);
 
-  // --- Helpers ---
   const haptic = (type: 'impact' | 'notification' | 'selection' | 'error') => {
     if (window.Telegram?.WebApp?.HapticFeedback && window.Telegram.WebApp.version && parseFloat(window.Telegram.WebApp.version) >= 6.1) {
        const hf = window.Telegram.WebApp.HapticFeedback;
        if (type === 'impact') hf.impactOccurred('heavy');
        if (type === 'notification') hf.notificationOccurred('success');
        if (type === 'error') hf.notificationOccurred('error');
-       if (type === 'selection') hf.selectionChanged();
     }
   };
 
   const getBetValue = () => { const val = parseInt(betAmount); return isNaN(val) ? 0 : val; };
-  
-  const adjustBet = (type: 'HALF' | 'DOUBLE' | 'MAX') => {
-    setInputError(false);
-    const current = getBetValue();
-    let newVal = current;
-    if (type === 'HALF') newVal = Math.floor(current / 2);
-    if (type === 'DOUBLE') newVal = current * 2;
-    if (type === 'MAX') newVal = player.balance;
-    if (newVal < MIN_BET) newVal = MIN_BET;
-    if (newVal > player.balance) newVal = player.balance;
-    setBetAmount(newVal.toString());
-  };
-
   const triggerError = () => { soundManager.play('ERROR'); setInputError(true); haptic('error'); setTimeout(() => setInputError(false), 500); };
 
   const checkAchievements = (currentPlayer: Player) => {
@@ -316,19 +289,16 @@ const App: React.FC = () => {
     setHistory(prev => [{ id: Date.now().toString(), type, amount, timestamp: Date.now() }, ...prev].slice(0, 50));
   };
 
-  // --- Real Chat ---
   const handleSendMessage = () => {
     if (!chatInput.trim()) return;
     if (firebaseService.isOnline) {
         firebaseService.sendMessage(player, chatInput);
     } else {
-        // Offline Echo
         setChatMessages(prev => [...prev, { id: Date.now().toString(), sender: player.name, text: chatInput, avatar: player.avatarSeed }]);
     }
     setChatInput('');
   };
 
-  // --- Single Player Game ---
   const handleFlip = (side: CoinSide) => {
     const bet = getBetValue();
     if (isFlipping) return;
@@ -341,7 +311,6 @@ const App: React.FC = () => {
     setShowResultText(false);
     setFlipCount(c => c + 1);
 
-    // Default Rigging Logic
     let winChance = 0.52; 
     const riskFactor = 0.25 + (Math.random() * 0.1); 
     if (bet > player.balance * riskFactor) {
@@ -408,15 +377,9 @@ const App: React.FC = () => {
   const handleCreateRoom = () => {
       const bet = getBetValue();
       if (bet > player.balance || bet < MIN_BET) { triggerError(); return; }
-      
-      if (!firebaseService.isOnline) {
-          alert("Для создания комнаты вставьте ключи Firebase в constants.ts");
-          return;
-      }
+      if (!firebaseService.isOnline) { alert("Firebase offline"); return; }
 
-      // Deduct bet immediately (Host)
       setPlayer(p => ({ ...p, balance: p.balance - bet }));
-      
       const code = firebaseService.createRoom(player, bet);
       setRoomCode(code);
       setPvpMode('LOBBY');
@@ -426,14 +389,12 @@ const App: React.FC = () => {
               setActiveRoom(roomData);
               if (roomData.status === 'FLIPPING') {
                   setPvpMode('GAME');
-                  setFlipCount(c => c + 1); // Trigger animation
+                  setFlipCount(c => c + 1);
                   setIsFlipping(true);
               }
               if (roomData.status === 'FINISHED') {
-                  // Resolve
                   setIsFlipping(false);
-                  resolvePvpGame(roomData, true); // true = I am Host
-                  // Unsub?
+                  resolvePvpGame(roomData, true);
                   unsub();
               }
           }
@@ -442,21 +403,13 @@ const App: React.FC = () => {
 
   const handleJoinRoom = async () => {
       if (!joinCodeInput || !firebaseService.isOnline) return;
-      
       const joined = await firebaseService.joinRoom(joinCodeInput, player);
       if (joined) {
           setRoomCode(joinCodeInput);
           setPvpMode('LOBBY');
-          
           const unsub = firebaseService.subscribeToRoom(joinCodeInput, (roomData) => {
               if (roomData) {
                   setActiveRoom(roomData);
-                  // Deduct bet if just joined and matched amount
-                  if (roomData.status === 'READY' && roomData.guestId === player.id) {
-                      // We need to verify we haven't paid yet? 
-                      // Simplified: deduct now. In real app, use transaction.
-                  }
-                  
                   if (roomData.status === 'FLIPPING') {
                       setPvpMode('GAME');
                       setFlipCount(c => c + 1);
@@ -464,44 +417,27 @@ const App: React.FC = () => {
                   }
                   if (roomData.status === 'FINISHED') {
                       setIsFlipping(false);
-                      resolvePvpGame(roomData, false); // false = I am Guest
+                      resolvePvpGame(roomData, false);
                       unsub();
                   }
               }
           });
       } else {
-          alert("Комната не найдена или уже занята");
+          triggerError();
       }
   };
   
   const resolvePvpGame = (room: PvpRoom, isHost: boolean) => {
-     // Determine winner logic was mostly server side or host side.
-     // Here we just check result vs our side (if we chose? Wait, host chooses side?)
-     // Let's say Host chooses.
-     
-     // Who won?
      const didHostWin = room.result === room.selectedSide;
      const didIWin = isHost ? didHostWin : !didHostWin;
-     
      if (didIWin) {
          soundManager.play('WIN');
          setShowConfetti(true);
-         // Payout: Pot * 0.95 (5% fee)
          const winAmount = (room.betAmount * 2) * 0.95;
-         
-         // If I am guest, I haven't paid yet in this logic flow (bug in simplified logic)
-         // FIX: Guest pays when joining.
-         // Let's assume guest paid when entering lobby UI step (missing in this snippet for brevity)
-         // We'll fix guest payment in next step or assume trust.
-         
-         setPlayer(p => ({
-             ...p,
-             balance: p.balance + winAmount
-         }));
+         setPlayer(p => ({ ...p, balance: p.balance + winAmount }));
      } else {
          soundManager.play('LOSE');
      }
-     
      setTimeout(() => {
          setPvpMode('MENU');
          setRoomCode('');
@@ -509,199 +445,175 @@ const App: React.FC = () => {
      }, 4000);
   };
 
-  // Host starts the flip
   const handleHostFlip = (side: CoinSide) => {
       if (!activeRoom || !firebaseService.isOnline) return;
       firebaseService.performFlip(activeRoom.id, side);
   };
   
-  // Guest pay logic wrapper
-  const confirmJoin = () => {
-     if (activeRoom && player.balance >= activeRoom.betAmount) {
-         setPlayer(p => ({ ...p, balance: p.balance - activeRoom.betAmount }));
-         handleJoinRoom();
-     } else {
-         triggerError();
-     }
-  };
-
+  // RENDERERS
   const renderMultiplayerTab = () => {
-    if (!firebaseService.isOnline) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center pb-24">
-                <div className="text-4xl mb-4">⚠️</div>
-                <h2 className="text-xl font-bold">Оффлайн Режим</h2>
-                <p className="text-slate-400 mt-2 mb-6">Чтобы играть с друзьями, нужно настроить Firebase в коде (constants.ts).</p>
-                <div className="p-4 bg-slate-900 rounded-xl text-xs text-left font-mono break-all border border-slate-700">
-                    FIREBASE_CONFIG = ...
-                </div>
-            </div>
-        );
-    }
-
     if (pvpMode === 'MENU') {
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 pb-24">
-               <h2 className="text-3xl font-bold mb-8 font-gzhel">PvP Арена</h2>
-               
-               <div className="w-full max-w-xs space-y-4">
-                  <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
-                     <div className="text-xs text-slate-500 uppercase font-bold mb-2">Создать Игру</div>
-                     <div className="flex gap-2">
-                        <input 
-                           type="number" value={betAmount} onChange={e => setBetAmount(e.target.value)}
-                           className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold"
-                        />
-                        <button onClick={handleCreateRoom} className="bg-blue-600 text-white px-6 rounded-xl font-bold hover:bg-blue-500">
-                           +
-                        </button>
-                     </div>
-                  </div>
-
-                  <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
-                     <div className="text-xs text-slate-500 uppercase font-bold mb-2">Войти по коду</div>
-                     <div className="flex gap-2">
-                        <input 
-                           type="text" placeholder="Код (напр. 4122)" 
-                           value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)}
-                           className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold"
-                        />
-                        <button 
-                            onClick={() => {
-                                // Simple check before joining
-                                if(player.balance >= MIN_BET) {
-                                    setPlayer(p => ({...p, balance: p.balance - getBetValue()})); // Deduct logic simplified
-                                    handleJoinRoom();
-                                }
-                            }} 
-                            className="bg-green-600 text-white px-6 rounded-xl font-bold hover:bg-green-500"
-                        >
-                           GO
-                        </button>
-                     </div>
-                  </div>
+            <div className="flex flex-col items-center justify-center h-full p-4 space-y-4">
+               <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 w-full max-w-xs">
+                 <div className="text-xs text-slate-500 uppercase font-bold mb-2">Создать Игру</div>
+                 <div className="flex gap-2">
+                    <input type="number" value={betAmount} onChange={e => setBetAmount(e.target.value)} className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold" />
+                    <button onClick={handleCreateRoom} className="bg-blue-600 text-white px-6 rounded-xl font-bold">+</button>
+                 </div>
+               </div>
+               <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 w-full max-w-xs">
+                 <div className="text-xs text-slate-500 uppercase font-bold mb-2">Войти по коду</div>
+                 <div className="flex gap-2">
+                    <input type="text" placeholder="Код" value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)} className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold" />
+                    <button onClick={() => { if(player.balance >= MIN_BET) { setPlayer(p => ({...p, balance: p.balance - getBetValue()})); handleJoinRoom(); }}} className="bg-green-600 text-white px-6 rounded-xl font-bold">GO</button>
+                 </div>
                </div>
             </div>
         );
     }
-
     if (pvpMode === 'LOBBY') {
         return (
-            <div className="flex flex-col items-center justify-center h-full p-6 pb-24">
+            <div className="flex flex-col items-center justify-center h-full p-4">
                 <div className="text-slate-400 uppercase text-xs font-bold mb-2">Код комнаты</div>
-                <div className="text-6xl font-mono font-black text-white tracking-widest mb-8 select-all bg-slate-900 p-4 rounded-2xl border-2 border-dashed border-slate-700">
-                    {roomCode}
+                <div className="text-6xl font-mono font-black text-white bg-slate-900 p-4 rounded-2xl border-2 border-dashed border-slate-700 mb-8">{roomCode}</div>
+                <div className="flex items-center gap-6 mb-8">
+                    <div className="flex flex-col items-center"><img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom?.hostAvatar}`} className="w-16 h-16 rounded-full border-2 border-blue-500"/><span className="mt-2 font-bold text-sm">{activeRoom?.hostName}</span></div>
+                    <div className="text-xl font-black text-red-500">VS</div>
+                    <div className="flex flex-col items-center">{activeRoom?.guestId ? <><img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom.guestAvatar}`} className="w-16 h-16 rounded-full border-2 border-red-500"/><span className="mt-2 font-bold text-sm">{activeRoom.guestName}</span></> : <div className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center animate-pulse">?</div>}</div>
                 </div>
-                
-                <div className="flex items-center gap-8 mb-8">
-                    <div className="flex flex-col items-center">
-                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom?.hostAvatar}`} className="w-16 h-16 rounded-full border-2 border-blue-500"/>
-                        <span className="mt-2 font-bold">{activeRoom?.hostName}</span>
-                    </div>
-                    <div className="text-2xl font-black text-red-500">VS</div>
-                    <div className="flex flex-col items-center">
-                        {activeRoom?.guestId ? (
-                             <>
-                                <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom.guestAvatar}`} className="w-16 h-16 rounded-full border-2 border-red-500"/>
-                                <span className="mt-2 font-bold">{activeRoom.guestName}</span>
-                             </>
-                        ) : (
-                             <div className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center animate-pulse">?</div>
-                        )}
-                    </div>
-                </div>
-                
                 {activeRoom?.hostId === player.id && activeRoom?.guestId && (
                      <div className="flex gap-4">
-                         <button onClick={() => handleHostFlip(CoinSide.HEADS)} className="bg-blue-600 px-8 py-4 rounded-xl font-bold text-white">ОРЁЛ</button>
-                         <button onClick={() => handleHostFlip(CoinSide.TAILS)} className="bg-blue-600 px-8 py-4 rounded-xl font-bold text-white">РЕШКА</button>
+                         <button onClick={() => handleHostFlip(CoinSide.HEADS)} className="bg-blue-600 px-6 py-3 rounded-xl font-bold text-white">ОРЁЛ</button>
+                         <button onClick={() => handleHostFlip(CoinSide.TAILS)} className="bg-blue-600 px-6 py-3 rounded-xl font-bold text-white">РЕШКА</button>
                      </div>
                 )}
-                {activeRoom?.hostId !== player.id && activeRoom?.guestId && (
-                     <div className="text-slate-500 animate-pulse">Ожидание хода хоста...</div>
-                )}
-                {!activeRoom?.guestId && <div className="text-slate-500">Ожидание игрока...</div>}
+                {!activeRoom?.guestId && <div className="text-slate-500 text-sm">Ожидание...</div>}
             </div>
         );
     }
-    
     if (pvpMode === 'GAME') {
         return (
-            <div className="flex flex-col items-center justify-center h-full pb-24">
+            <div className="flex flex-col items-center justify-center h-full">
                 <Coin flipping={isFlipping} result={activeRoom?.result || null} />
-                <div className="mt-8 text-2xl font-bold text-white">
-                    {isFlipping ? 'Бросаем...' : activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}
-                </div>
+                <div className="mt-8 text-2xl font-bold text-white">{isFlipping ? '...' : activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}</div>
             </div>
         );
     }
-    
     return null;
   };
 
   const renderProfileTab = () => (
-     <div className="flex flex-col h-full pt-6 px-4 pb-24 overflow-y-auto relative">
-        <div className="absolute top-4 right-2">
-           <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 hover:text-white rounded-full hover:bg-slate-800 transition-colors">
-              <SettingsIcon />
-           </button>
-        </div>
-        <div className="flex flex-col items-center mb-8">
-           <div className="relative">
-              <div className="w-24 h-24 rounded-full bg-slate-800 border-4 border-blue-600 overflow-hidden shadow-xl">
-                 <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.avatarSeed}`} alt="Avatar" />
-              </div>
-           </div>
-           <h2 className="mt-4 text-2xl font-bold text-white">{player.name}</h2>
-           <div className="font-mono text-blue-400 font-bold text-xl"><AnimatedBalance value={player.balance} /></div>
-        </div>
-        {/* Simplified stats view for brevity */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
-           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><div className="text-xs text-slate-500">Побед</div><div className="text-2xl font-black text-green-500">{player.stats.totalWins}</div></div>
-           <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center"><div className="text-xs text-slate-500">Игр</div><div className="text-2xl font-black text-white">{player.stats.totalGames}</div></div>
-        </div>
-        {isAdmin && <button onClick={() => setActiveTab(Tab.ADMIN)} className="mt-4 p-4 border border-dashed border-slate-800 rounded-xl text-slate-600 w-full">🔐 Банк Казино</button>}
-     </div>
+    <div className="flex flex-col h-full overflow-y-auto no-scrollbar pb-[70px] p-4 space-y-4">
+      
+      {/* Header Profile Card */}
+      <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 flex flex-col items-center relative animate-fade-in-up">
+         <button onClick={() => setShowSettings(true)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+            <SettingsIcon />
+         </button>
+         <div className="relative">
+            <img 
+               src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.avatarSeed}`} 
+               alt="avatar" 
+               className="w-24 h-24 rounded-full border-4 border-blue-900 bg-slate-800 mb-3 shadow-[0_0_20px_rgba(30,58,138,0.5)]"
+            />
+            {isAdmin && <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full border border-slate-900">ADMIN</span>}
+         </div>
+         <h2 className="text-2xl font-bold text-white mb-1">{player.name}</h2>
+         <div className="text-blue-400 font-mono text-xl"><AnimatedBalance value={player.balance} /></div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 gap-3 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+         <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            <div className="text-xs text-slate-500 uppercase font-bold">Побед</div>
+            <div className="text-2xl font-black text-green-500">{player.stats.totalWins}</div>
+         </div>
+         <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            <div className="text-xs text-slate-500 uppercase font-bold">Игр</div>
+            <div className="text-2xl font-black text-white">{player.stats.totalGames}</div>
+         </div>
+         <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            <div className="text-xs text-slate-500 uppercase font-bold">Винрейт</div>
+            <div className="text-xl font-black text-yellow-500">
+               {player.stats.totalGames > 0 ? Math.round((player.stats.totalWins / player.stats.totalGames) * 100) : 0}%
+            </div>
+         </div>
+         <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+            <div className="text-xs text-slate-500 uppercase font-bold">Стрик</div>
+            <div className="text-xl font-black text-red-500 flex items-center gap-1">
+               {player.stats.currentWinStreak} <span className="text-xs text-slate-600">({player.stats.maxWinStreak})</span>
+            </div>
+         </div>
+      </div>
+
+      {/* Achievements */}
+      <div className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+         <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">Достижения</h3>
+         <div className="space-y-2">
+            {ACHIEVEMENTS_LIST.map(ach => {
+               const unlocked = player.achievements.includes(ach.id);
+               return (
+                  <div key={ach.id} className={`p-3 rounded-xl border flex items-center gap-3 ${unlocked ? 'bg-slate-900 border-yellow-500/30' : 'bg-slate-900/50 border-slate-800 opacity-50 grayscale'}`}>
+                     <div className="text-2xl">{ach.icon}</div>
+                     <div>
+                        <div className="text-sm font-bold text-white">{ach.title}</div>
+                        <div className="text-xs text-slate-400">{ach.description}</div>
+                     </div>
+                     {unlocked && <div className="ml-auto text-yellow-500">✓</div>}
+                  </div>
+               );
+            })}
+         </div>
+      </div>
+      
+      {/* Transaction History */}
+      <div className="animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+         <h3 className="text-white font-bold mb-3 text-sm uppercase tracking-wider">История</h3>
+         <div className="space-y-2">
+            {history.length === 0 && <div className="text-slate-600 text-center text-sm py-4">Пусто</div>}
+            {history.map(tx => (
+               <div key={tx.id} className="flex justify-between items-center bg-slate-900/50 p-3 rounded-xl border border-slate-800">
+                  <span className={`text-xs font-bold px-2 py-1 rounded ${
+                     tx.type === 'WIN' || tx.type === 'PVP_WIN' || tx.type === 'BONUS' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'
+                  }`}>
+                     {tx.type === 'WIN' ? 'ПОБЕДА' : 
+                      tx.type === 'LOSS' ? 'ПРОИГРЫШ' : 
+                      tx.type === 'BONUS' ? 'БОНУС' : 
+                      tx.type === 'PVP_WIN' ? 'PVP WIN' : 'PVP LOSS'}
+                  </span>
+                  <span className="font-mono text-white">{tx.amount} ₽</span>
+               </div>
+            ))}
+         </div>
+      </div>
+    </div>
   );
   
   const renderChatTab = () => (
-    <div className="flex flex-col h-full relative">
-       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32 no-scrollbar">
-          {chatMessages.length === 0 && (
-             <div className="text-center text-slate-500 mt-10 text-sm">
-                Нет сообщений. Будьте первым!
-             </div>
-          )}
+    <div className="flex flex-col h-full pb-[60px]">
+       <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
+          {chatMessages.length === 0 && <div className="text-center text-slate-500 mt-10 text-sm">Нет сообщений</div>}
           {chatMessages.map((msg) => {
              const isMe = msg.sender === player.name;
              return (
                <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in-up`}>
-                 <div className={`flex flex-col max-w-[80%] ${isMe ? 'items-end' : 'items-start'}`}>
-                   <div className="flex items-center gap-2 mb-1">
-                     {!isMe && <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${msg.avatar}`} className="w-6 h-6 rounded-full bg-slate-800" alt={msg.sender} />}
-                     <span className="text-[10px] text-slate-500 font-bold">{msg.sender}</span>
-                   </div>
-                   <div className={`p-3 rounded-2xl text-sm font-medium shadow-md ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none'}`}>
+                 <div className={`flex flex-col max-w-[85%] ${isMe ? 'items-end' : 'items-start'}`}>
+                   <div className={`p-3 rounded-2xl text-sm font-medium shadow-md break-words ${isMe ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none'}`}>
                      {msg.text}
                    </div>
+                   <div className="text-[10px] text-slate-600 mt-1">{msg.sender}</div>
                  </div>
                </div>
              );
           })}
           <div ref={chatEndRef} />
        </div>
-       <div className="absolute bottom-16 left-0 right-0 p-4 bg-slate-900/95 backdrop-blur border-t border-slate-800 z-20">
+       <div className="p-3 bg-slate-900/95 border-t border-slate-800 shrink-0">
           <div className="flex gap-2">
-             <input 
-               type="text" 
-               value={chatInput}
-               onChange={(e) => setChatInput(e.target.value)}
-               onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-               placeholder="Написать сообщение..." 
-               className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors"
-             />
-             <button onClick={handleSendMessage} className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-500 active:scale-95 transition-all shadow-lg shadow-blue-900/20">
-               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+             <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()} placeholder="Сообщение..." className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-blue-500" />
+             <button onClick={handleSendMessage} className="bg-blue-600 text-white p-3 rounded-xl">
+               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
              </button>
           </div>
        </div>
@@ -709,57 +621,47 @@ const App: React.FC = () => {
   );
 
   const renderGameTab = () => (
-    <div className="flex flex-col h-full px-4 pt-4 pb-24 overflow-y-auto no-scrollbar">
-      <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl mb-4 relative">
-          <div className="text-slate-400 text-xs font-bold uppercase">Баланс</div>
-          <div className="text-3xl font-black text-white"><AnimatedBalance value={player.balance} /></div>
+    <div className="flex flex-col h-full px-2 pt-2 pb-[70px] overflow-y-auto no-scrollbar">
+      <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 shadow-xl mb-2 relative shrink-0">
+          <div className="text-slate-400 text-[10px] font-bold uppercase">Баланс</div>
+          <div className="text-2xl font-black text-white"><AnimatedBalance value={player.balance} /></div>
           {(!player.lastBonusClaim || Date.now() - player.lastBonusClaim > 86400000) && (
-             <button onClick={() => { setPlayer(p => ({...p, balance: p.balance + 100, lastBonusClaim: Date.now()})); setHouseBank(b => b-100); }} className="absolute right-4 top-6 bg-blue-600 px-4 py-2 rounded-full text-xs font-bold">+100</button>
+             <button onClick={() => { setPlayer(p => ({...p, balance: p.balance + 100, lastBonusClaim: Date.now()})); setHouseBank(b => b-100); }} className="absolute right-4 top-4 bg-blue-600 px-3 py-1 rounded-full text-[10px] font-bold">+100</button>
           )}
       </div>
-      <div className="flex-1 flex flex-col items-center justify-center relative min-h-[250px]">
-        <div className="h-12 flex items-center justify-center mb-4 min-h-[3rem]">
+      <div className="flex-1 flex flex-col items-center justify-center relative min-h-[200px]">
+        <div className="h-8 flex items-center justify-center mb-2">
             {!isFlipping && flipResult && showResultText && (
-               <div className={`text-4xl font-black animate-bounce ${flipResult === selectedSide ? 'text-green-400' : 'text-red-500'}`}>
+               <div className={`text-3xl font-black animate-bounce ${flipResult === selectedSide ? 'text-green-400' : 'text-red-500'}`}>
                  {flipResult === selectedSide ? `+${Math.floor(getBetValue() * WIN_COEFFICIENT) - getBetValue()}` : `-${getBetValue()}`}
                </div>
             )}
         </div>
         <Coin key={flipCount} flipping={isFlipping} result={flipResult} />
       </div>
-      <div className="bg-slate-900/90 rounded-t-3xl border-t border-slate-800 p-6 -mx-4">
-        <div className={`flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border mb-4 ${inputError ? 'border-red-500' : 'border-slate-800'}`}>
-           <input type="number" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} className="bg-transparent text-center w-full text-2xl font-black text-white focus:outline-none" />
+      <div className="bg-slate-900/90 rounded-t-3xl border-t border-slate-800 p-4 -mx-2 shrink-0">
+        <div className={`flex items-center gap-2 bg-slate-950 p-1.5 rounded-2xl border mb-3 ${inputError ? 'border-red-500' : 'border-slate-800'}`}>
+           <input type="number" value={betAmount} onChange={(e) => setBetAmount(e.target.value)} className="bg-transparent text-center w-full text-xl font-black text-white focus:outline-none" />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => handleFlip(CoinSide.HEADS)} disabled={isFlipping} className="bg-slate-800 p-4 rounded-2xl border-2 border-slate-700 active:border-white"><span className="text-xl font-black text-white">ОРЁЛ</span></button>
-          <button onClick={() => handleFlip(CoinSide.TAILS)} disabled={isFlipping} className="bg-slate-800 p-4 rounded-2xl border-2 border-slate-700 active:border-blue-500"><span className="text-xl font-black text-blue-400">РЕШКА</span></button>
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => handleFlip(CoinSide.HEADS)} disabled={isFlipping} className="bg-slate-800 p-3 rounded-xl border-2 border-slate-700 active:border-white"><span className="text-lg font-black text-white">ОРЁЛ</span></button>
+          <button onClick={() => handleFlip(CoinSide.TAILS)} disabled={isFlipping} className="bg-slate-800 p-3 rounded-xl border-2 border-slate-700 active:border-blue-500"><span className="text-lg font-black text-blue-400">РЕШКА</span></button>
         </div>
       </div>
     </div>
   );
 
   const BottomNav = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800 pb-safe pt-2 z-50">
-      <div className="flex justify-around items-center px-1 h-[60px]">
+    <div className="h-[60px] bg-slate-900/90 backdrop-blur border-t border-slate-800 flex justify-around items-center px-1 shrink-0 z-50">
         <button onClick={() => setActiveTab(Tab.GAME)} className={`flex flex-col items-center p-2 w-14 ${activeTab === Tab.GAME ? 'text-blue-500' : 'text-slate-600'}`}><GameIcon active={activeTab === Tab.GAME} /><span className="text-[9px] mt-1">ИГРА</span></button>
         <button onClick={() => setActiveTab(Tab.MULTIPLAYER)} className={`flex flex-col items-center p-2 w-14 ${activeTab === Tab.MULTIPLAYER ? 'text-blue-500' : 'text-slate-600'}`}><MultiIcon active={activeTab === Tab.MULTIPLAYER} /><span className="text-[9px] mt-1">PvP</span></button>
         <button onClick={() => setActiveTab(Tab.CHAT)} className={`flex flex-col items-center p-2 w-14 ${activeTab === Tab.CHAT ? 'text-blue-500' : 'text-slate-600'}`}><ChatIcon active={activeTab === Tab.CHAT} /><span className="text-[9px] mt-1">ЧАТ</span></button>
         <button onClick={() => setActiveTab(Tab.PROFILE)} className={`flex flex-col items-center p-2 w-14 ${activeTab === Tab.PROFILE ? 'text-blue-500' : 'text-slate-600'}`}><ProfileIcon active={activeTab === Tab.PROFILE} /><span className="text-[9px] mt-1">ПРОФИЛЬ</span></button>
-      </div>
     </div>
   );
 
-  const renderAdminTab = () => (
-      <div className="p-6 bg-black h-full">
-          <h2 className="text-red-500 font-bold text-2xl mb-4">ADMIN PANEL</h2>
-          <div className="text-4xl text-green-500 font-mono mb-8">{houseBank.toLocaleString()} ₽</div>
-          <button onClick={() => setActiveTab(Tab.PROFILE)} className="text-white border p-2 rounded">EXIT</button>
-      </div>
-  );
-
   return (
-    <div className="h-full w-full relative">
+    <div className="flex flex-col h-[100dvh] w-full overflow-hidden bg-[#020617]" onClick={handleGlobalClick}>
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
       {showConfetti && <Confetti />}
       <AchievementToast achievement={newAchievement} visible={!!newAchievement} />
@@ -773,14 +675,14 @@ const App: React.FC = () => {
             </div>
          </div>
       )}
-      <div className="h-full w-full relative z-10">
+      
+      <div className="flex-1 relative overflow-hidden z-10">
         {activeTab === Tab.GAME && renderGameTab()}
         {activeTab === Tab.MULTIPLAYER && renderMultiplayerTab()}
         {activeTab === Tab.CHAT && renderChatTab()}
         {activeTab === Tab.PROFILE && renderProfileTab()}
-        {activeTab === Tab.ADMIN && renderAdminTab()}
-        {/* Other tabs omitted for brevity but logic exists */}
       </div>
+      
       <BottomNav />
     </div>
   );
