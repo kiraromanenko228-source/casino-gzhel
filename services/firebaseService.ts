@@ -9,7 +9,8 @@ import {
   update, 
   query,
   orderByChild,
-  limitToLast
+  limitToLast,
+  remove
 } from 'firebase/database';
 import { FIREBASE_CONFIG } from '../constants';
 import { ChatMessage, PvpRoom, Player, CoinSide, Leader } from '../types';
@@ -112,6 +113,13 @@ class FirebaseService {
     return roomId;
   }
 
+  // Cancel room if waiting
+  cancelRoom(roomId: string) {
+    if (!this.db) return;
+    const roomRef = ref(this.db, `rooms/${roomId}`);
+    remove(roomRef);
+  }
+
   async joinRoom(roomId: string, guest: Player): Promise<boolean> {
     if (!this.db) return false;
     const roomRef = ref(this.db, `rooms/${roomId}`);
@@ -137,6 +145,26 @@ class FirebaseService {
       if (!this.db) return () => {};
       const roomRef = ref(this.db, `rooms/${roomId}`);
       return onValue(roomRef, (snapshot) => callback(snapshot.val()));
+  }
+
+  subscribeToLobby(callback: (rooms: PvpRoom[]) => void) {
+      if (!this.db) return () => {};
+      const roomsRef = ref(this.db, 'rooms');
+      
+      // Listen to all rooms and filter client side (simple for MVP)
+      return onValue(roomsRef, (snapshot) => {
+          const data = snapshot.val();
+          if (!data) {
+              callback([]);
+              return;
+          }
+          const activeRooms: PvpRoom[] = Object.values(data);
+          // Only show Waiting rooms
+          const waiting = activeRooms.filter((r: any) => r.status === 'WAITING');
+          // Sort by newest
+          waiting.sort((a, b) => b.createdAt - a.createdAt);
+          callback(waiting);
+      });
   }
 
   performFlip(roomId: string, side: CoinSide) {
