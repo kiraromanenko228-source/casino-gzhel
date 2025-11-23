@@ -258,7 +258,7 @@ const App: React.FC = () => {
           setPvpMode('MENU'); 
           setActiveRoom(null); 
           setPvpResult(null);
-      }, 4000);
+      }, 5000); // 5 seconds to enjoy the victory screen
   };
 
   const renderGameTab = () => (
@@ -322,7 +322,17 @@ const App: React.FC = () => {
     </div>
   );
   
-  const renderMultiplayerTab = () => (
+  const renderMultiplayerTab = () => {
+    // Helper to calculate win amounts for display
+    const potentialWin = Math.floor((activeRoom?.betAmount || 0) * 1.9);
+    const lossAmount = activeRoom?.betAmount || 0;
+    
+    // Determine opponent info for Result Screen
+    const isHost = activeRoom?.hostId === player.id;
+    const opponentName = isHost ? activeRoom?.guestName : activeRoom?.hostName;
+    const opponentAvatar = isHost ? activeRoom?.guestAvatar : activeRoom?.hostAvatar;
+
+    return (
       <div className="flex flex-col h-full items-center justify-center p-4 pb-[80px] relative">
         {pvpMode === 'MENU' && (
             <div className="w-full max-w-sm space-y-4">
@@ -361,22 +371,52 @@ const App: React.FC = () => {
                  <Coin flipping={isFlipping} result={activeRoom?.result || null} />
                  {!isFlipping && !pvpResult && <div className="text-3xl font-black text-white mt-8">{activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}</div>}
                  
-                 {/* RESULT OVERLAY */}
+                 {/* SPECTACULAR RESULT OVERLAY */}
                  {pvpResult && (
-                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+                    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 animate-fade-in backdrop-blur-md">
+                       {/* Background Burst */}
+                       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black pointer-events-none"></div>
+                       {pvpResult === 'WIN' && <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent animate-pulse-glow pointer-events-none"></div>}
                        {pvpResult === 'WIN' && <Confetti />}
-                       <div className={`text-6xl font-black mb-4 ${pvpResult === 'WIN' ? 'text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]' : 'text-slate-500'} animate-bounce`}>
-                           {pvpResult === 'WIN' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ'}
-                       </div>
-                       <div className="text-white text-xl font-bold">
-                           {pvpResult === 'WIN' ? `+${Math.floor((activeRoom?.betAmount || 0) * 1.9)} ₽` : `-${activeRoom?.betAmount} ₽`}
+
+                       {/* Content */}
+                       <div className="z-10 flex flex-col items-center animate-pop-in">
+                           <div className={`text-6xl md:text-8xl font-black mb-6 tracking-tighter ${pvpResult === 'WIN' ? 'text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 drop-shadow-[0_0_25px_rgba(234,179,8,0.8)]' : 'text-slate-500'}`}>
+                               {pvpResult === 'WIN' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ'}
+                           </div>
+
+                           <div className="flex items-center gap-8 mb-8">
+                               {/* My Avatar */}
+                               <div className="flex flex-col items-center">
+                                   <div className={`relative p-1 rounded-full ${pvpResult === 'WIN' ? 'bg-gradient-to-tr from-yellow-400 to-yellow-600 animate-pulse-glow shadow-[0_0_30px_rgba(234,179,8,0.6)]' : 'bg-slate-700 grayscale opacity-70'}`}>
+                                       <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.avatarSeed}`} className="w-20 h-20 rounded-full bg-slate-900" />
+                                       {pvpResult === 'WIN' && <div className="absolute -bottom-2 -right-2 text-3xl">👑</div>}
+                                   </div>
+                                   <div className="mt-2 font-bold text-white">Вы</div>
+                               </div>
+
+                               <div className="text-2xl font-black text-slate-600">VS</div>
+
+                               {/* Opponent Avatar */}
+                               <div className="flex flex-col items-center">
+                                   <div className={`relative p-1 rounded-full ${pvpResult === 'LOSS' ? 'bg-gradient-to-tr from-yellow-400 to-yellow-600 shadow-[0_0_30px_rgba(234,179,8,0.6)]' : 'bg-slate-700 grayscale opacity-70'}`}>
+                                       <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${opponentAvatar}`} className="w-20 h-20 rounded-full bg-slate-900" />
+                                       {pvpResult === 'LOSS' && <div className="absolute -bottom-2 -right-2 text-3xl">👑</div>}
+                                   </div>
+                                   <div className="mt-2 font-bold text-slate-400">{opponentName || 'Соперник'}</div>
+                               </div>
+                           </div>
+                           
+                           <div className={`text-5xl md:text-7xl font-mono font-black ${pvpResult === 'WIN' ? 'text-green-400 drop-shadow-lg' : 'text-red-500'}`}>
+                               {pvpResult === 'WIN' ? `+ ${potentialWin.toLocaleString()} ₽` : `- ${lossAmount.toLocaleString()} ₽`}
+                           </div>
                        </div>
                     </div>
                  )}
              </div>
         )}
       </div>
-  );
+  )};
 
   const renderProfileTab = () => (
     <div className="flex flex-col h-full p-4 overflow-y-auto pb-[80px]">
@@ -430,6 +470,9 @@ const App: React.FC = () => {
                   <div className="flex justify-between text-white mb-6">
                       <span>Звук</span>
                       <button onClick={() => setSoundEnabled(!soundEnabled)} className="font-bold text-blue-400">{soundEnabled ? 'ВКЛ' : 'ВЫКЛ'}</button>
+                  </div>
+                  <div className="mb-6">
+                     <button onClick={() => soundManager.play('WIN')} className="text-xs bg-slate-800 text-blue-400 px-3 py-2 rounded-lg border border-slate-700 hover:border-blue-500 w-full">🔊 Тест звука</button>
                   </div>
                   <button onClick={() => setShowSettings(false)} className="w-full bg-slate-800 text-white p-3 rounded-xl">Закрыть</button>
               </div>
