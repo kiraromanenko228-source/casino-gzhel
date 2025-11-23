@@ -106,8 +106,8 @@ const App: React.FC = () => {
   const [pvpMode, setPvpMode] = useState<'MENU' | 'CREATE' | 'JOIN' | 'LOBBY' | 'GAME'>('MENU');
   const [roomCode, setRoomCode] = useState('');
   const [activeRoom, setActiveRoom] = useState<PvpRoom | null>(null);
-  const [joinCodeInput, setJoinCodeInput] = useState('');
   const [pvpResult, setPvpResult] = useState<'WIN' | 'LOSS' | null>(null);
+  const [lobbyRooms, setLobbyRooms] = useState<PvpRoom[]>([]);
   
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -167,6 +167,9 @@ const App: React.FC = () => {
 
     // 5. LEADERS SYNC
     firebaseService.subscribeToLeaders(setLeaders);
+    
+    // 6. LOBBY SYNC
+    firebaseService.subscribeToLobby(setLobbyRooms);
 
     setIsLoaded(true);
   }, []);
@@ -233,13 +236,42 @@ const App: React.FC = () => {
       const code = firebaseService.createRoom(player, bet);
       setRoomCode(code);
       setPvpMode('LOBBY');
-      firebaseService.subscribeToRoom(code, (roomData) => {
+      subscribeToRoomUpdates(code);
+  };
+
+  const handleJoinRoom = async (room: PvpRoom) => {
+      if (player.balance < room.betAmount) { soundManager.play('ERROR'); return; }
+      const success = await firebaseService.joinRoom(room.id, player);
+      if (success) {
+          setPlayer(p => ({ ...p, balance: p.balance - room.betAmount }));
+          setRoomCode(room.id);
+          setPvpMode('LOBBY');
+          subscribeToRoomUpdates(room.id);
+      }
+  };
+
+  const subscribeToRoomUpdates = (code: string) => {
+      const unsub = firebaseService.subscribeToRoom(code, (roomData) => {
           if (roomData) {
               setActiveRoom(roomData);
               if (roomData.status === 'FLIPPING') { setPvpMode('GAME'); setFlipCount(c => c+1); setIsFlipping(true); }
-              if (roomData.status === 'FINISHED') { setIsFlipping(false); resolvePvpGame(roomData, true); }
+              if (roomData.status === 'FINISHED') { setIsFlipping(false); resolvePvpGame(roomData, roomData.hostId === player.id); unsub(); }
+          } else {
+              // Room deleted or invalid
+              setPvpMode('MENU');
+              unsub();
           }
       });
+  };
+
+  const handleCancelRoom = () => {
+      if (activeRoom && activeRoom.hostId === player.id) {
+          firebaseService.cancelRoom(activeRoom.id);
+          // Return money
+          setPlayer(p => ({ ...p, balance: p.balance + activeRoom.betAmount }));
+          setPvpMode('MENU');
+          setActiveRoom(null);
+      }
   };
   
   const resolvePvpGame = (room: PvpRoom, isHost: boolean) => {
@@ -333,36 +365,87 @@ const App: React.FC = () => {
     const opponentAvatar = isHost ? activeRoom?.guestAvatar : activeRoom?.hostAvatar;
 
     return (
-      <div className="flex flex-col h-full items-center justify-center p-4 pb-[80px] relative">
+      <div className="flex flex-col h-full items-center justify-start p-4 pb-[80px] relative w-full overflow-hidden">
         {pvpMode === 'MENU' && (
-            <div className="w-full max-w-sm space-y-4">
-               <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center">
-                  <h3 className="text-xl font-bold text-white mb-4">PvP Арена</h3>
-                  <div className="flex gap-2 mb-4">
-                     <input type="number" value={betAmount} onChange={e => setBetAmount(e.target.value)} className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold text-white" />
-                  </div>
-                  <button onClick={handleCreateRoom} className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold mb-4">Создать Игру</button>
+            <div className="w-full flex flex-col h-full">
+               <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 mb-4 shrink-0">
+                  <h3 className="text-lg font-bold text-white mb-2 text-center">Создать Игру</h3>
                   <div className="flex gap-2">
-                      <input placeholder="Код комнаты" value={joinCodeInput} onChange={e => setJoinCodeInput(e.target.value)} className="bg-slate-950 flex-1 p-3 rounded-xl text-center text-white" />
-                      <button onClick={async () => { const res = await firebaseService.joinRoom(joinCodeInput, player); if(res) { setRoomCode(joinCodeInput); setPvpMode('LOBBY'); const unsub = firebaseService.subscribeToRoom(joinCodeInput, r => { if(r) { setActiveRoom(r); if(r.status==='FLIPPING'){ setPvpMode('GAME'); setIsFlipping(true); } if(r.status==='FINISHED'){ setIsFlipping(false); resolvePvpGame(r, false); unsub(); } } }); } }} className="bg-green-600 text-white px-6 rounded-xl font-bold">GO</button>
+                     <input type="number" value={betAmount} onChange={e => setBetAmount(e.target.value)} className="bg-slate-950 w-full p-3 rounded-xl text-center font-bold text-white" placeholder="Ставка" />
+                     <button onClick={handleCreateRoom} className="bg-blue-600 text-white px-6 rounded-xl font-bold whitespace-nowrap">СОЗДАТЬ</button>
                   </div>
+               </div>
+               
+               <div className="flex-1 overflow-y-auto no-scrollbar">
+                   <h3 className="text-sm font-bold text-slate-500 mb-3 uppercase tracking-wider">Активные Столы</h3>
+                   {lobbyRooms.length === 0 ? (
+                       <div className="text-center text-slate-600 mt-10 p-10 border-2 border-dashed border-slate-800 rounded-2xl">
+                           Нет активных игр. <br/> Создай свою!
+                       </div>
+                   ) : (
+                       <div className="space-y-3">
+                           {lobbyRooms.map(room => (
+                               <div key={room.id} className="bg-slate-800/50 p-3 rounded-2xl border border-slate-700 flex items-center justify-between">
+                                   <div className="flex items-center gap-3">
+                                       <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${room.hostAvatar}`} className="w-10 h-10 rounded-full bg-slate-900" />
+                                       <div>
+                                           <div className="font-bold text-white text-sm">{room.hostName}</div>
+                                           <div className="text-blue-400 font-mono text-xs">{room.betAmount} ₽</div>
+                                       </div>
+                                   </div>
+                                   {room.hostId !== player.id && (
+                                       <button onClick={() => handleJoinRoom(room)} className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold text-sm">ИГРАТЬ</button>
+                                   )}
+                                   {room.hostId === player.id && (
+                                        <div className="text-xs text-yellow-500 font-bold px-3 py-1 bg-yellow-500/10 rounded-lg">Ваша игра</div>
+                                   )}
+                               </div>
+                           ))}
+                       </div>
+                   )}
                </div>
             </div>
         )}
         {pvpMode === 'LOBBY' && (
-            <div className="text-center">
-                <div className="text-slate-400 mb-2">Код комнаты</div>
-                <div className="text-6xl font-mono font-black text-white mb-8">{roomCode}</div>
-                <div className="flex items-center justify-center gap-8">
-                    <div className="flex flex-col items-center"><img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom?.hostAvatar}`} className="w-16 h-16 rounded-full border-2 border-blue-500 mb-2"/>{activeRoom?.hostName}</div>
-                    <div className="text-2xl font-black text-red-500">VS</div>
-                    <div className="flex flex-col items-center">{activeRoom?.guestId ? <><img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom.guestAvatar}`} className="w-16 h-16 rounded-full border-2 border-red-500 mb-2"/>{activeRoom.guestName}</> : <div className="w-16 h-16 rounded-full border-2 border-dashed border-slate-600 flex items-center justify-center animate-pulse">?</div>}</div>
-                </div>
-                {activeRoom?.hostId === player.id && activeRoom?.guestId && (
-                    <div className="flex gap-4 mt-8">
-                        <button onClick={() => firebaseService.performFlip(activeRoom.id, CoinSide.HEADS)} className="bg-blue-600 px-8 py-4 rounded-xl font-black text-white">ОРЁЛ</button>
-                        <button onClick={() => firebaseService.performFlip(activeRoom.id, CoinSide.TAILS)} className="bg-blue-600 px-8 py-4 rounded-xl font-black text-white">РЕШКА</button>
+            <div className="flex flex-col items-center justify-center h-full w-full">
+                <div className="text-slate-400 mb-2 uppercase tracking-widest text-xs">Ожидание соперника...</div>
+                
+                <div className="flex items-center justify-center gap-6 mb-12 scale-90 sm:scale-100">
+                    <div className="flex flex-col items-center relative">
+                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom?.hostAvatar}`} className="w-20 h-20 rounded-full border-4 border-blue-500 bg-slate-900 shadow-[0_0_30px_rgba(59,130,246,0.5)]"/>
+                        <div className="mt-3 font-bold text-white">{activeRoom?.hostName}</div>
+                        {activeRoom?.hostId === player.id && <div className="absolute -top-2 -right-2 bg-blue-600 text-[10px] px-2 py-1 rounded text-white font-bold">ВЫ</div>}
                     </div>
+                    <div className="text-4xl font-black text-slate-700 italic">VS</div>
+                    <div className="flex flex-col items-center relative">
+                        {activeRoom?.guestId ? (
+                            <>
+                             <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom.guestAvatar}`} className="w-20 h-20 rounded-full border-4 border-red-500 bg-slate-900 shadow-[0_0_30px_rgba(239,68,68,0.5)] animate-pop-in"/>
+                             <div className="mt-3 font-bold text-white">{activeRoom.guestName}</div>
+                             {activeRoom?.guestId === player.id && <div className="absolute -top-2 -right-2 bg-blue-600 text-[10px] px-2 py-1 rounded text-white font-bold">ВЫ</div>}
+                            </>
+                        ) : (
+                            <div className="w-20 h-20 rounded-full border-4 border-dashed border-slate-700 flex items-center justify-center animate-pulse bg-slate-900">
+                                <span className="text-slate-500 font-bold text-2xl">?</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* GAME CONTROLS FOR HOST */}
+                {activeRoom?.hostId === player.id && activeRoom?.guestId && (
+                    <div className="animate-fade-in-up w-full max-w-xs">
+                        <div className="text-center text-slate-400 text-xs mb-4">Выберите сторону, чтобы начать</div>
+                        <div className="flex gap-3">
+                            <button onClick={() => firebaseService.performFlip(activeRoom.id, CoinSide.HEADS)} className="flex-1 bg-slate-800 border-2 border-slate-600 hover:border-blue-500 active:bg-blue-600 py-4 rounded-xl font-black text-white transition-all">ОРЁЛ</button>
+                            <button onClick={() => firebaseService.performFlip(activeRoom.id, CoinSide.TAILS)} className="flex-1 bg-slate-800 border-2 border-slate-600 hover:border-blue-500 active:bg-blue-600 py-4 rounded-xl font-black text-white transition-all">РЕШКА</button>
+                        </div>
+                    </div>
+                )}
+
+                {/* CANCEL BUTTON FOR HOST IF WAITING */}
+                {activeRoom?.hostId === player.id && !activeRoom?.guestId && (
+                     <button onClick={handleCancelRoom} className="mt-8 text-red-500 text-sm border border-red-900/50 px-4 py-2 rounded-lg hover:bg-red-900/20">Отменить игру</button>
                 )}
             </div>
         )}
