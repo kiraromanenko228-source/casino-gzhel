@@ -65,6 +65,19 @@ const AnimatedBalance = ({ value }: { value: number }) => {
   return <>{Math.floor(display).toLocaleString()} ₽</>;
 };
 
+const Confetti = () => {
+  const pieces = Array.from({ length: 50 }).map((_, i) => {
+    const style = {
+      left: `${Math.random() * 100}%`,
+      animationDuration: `${2 + Math.random() * 2}s`,
+      animationDelay: `${Math.random() * 1}s`,
+      backgroundColor: ['#fbbf24', '#3b82f6', '#ef4444', '#ffffff'][Math.floor(Math.random() * 4)]
+    } as React.CSSProperties;
+    return <div key={i} className="confetti" style={style} />;
+  });
+  return <div className="fixed inset-0 pointer-events-none overflow-hidden z-[60]">{pieces}</div>;
+};
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>(Tab.GAME);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -94,6 +107,7 @@ const App: React.FC = () => {
   const [roomCode, setRoomCode] = useState('');
   const [activeRoom, setActiveRoom] = useState<PvpRoom | null>(null);
   const [joinCodeInput, setJoinCodeInput] = useState('');
+  const [pvpResult, setPvpResult] = useState<'WIN' | 'LOSS' | null>(null);
   
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -235,10 +249,16 @@ const App: React.FC = () => {
           const winAmount = (room.betAmount * 2) * 0.95;
           setPlayer(p => ({...p, balance: p.balance + winAmount}));
           soundManager.play('WIN');
+          setPvpResult('WIN');
       } else {
           soundManager.play('LOSE');
+          setPvpResult('LOSS');
       }
-      setTimeout(() => { setPvpMode('MENU'); setActiveRoom(null); }, 4000);
+      setTimeout(() => { 
+          setPvpMode('MENU'); 
+          setActiveRoom(null); 
+          setPvpResult(null);
+      }, 4000);
   };
 
   const renderGameTab = () => (
@@ -303,7 +323,7 @@ const App: React.FC = () => {
   );
   
   const renderMultiplayerTab = () => (
-      <div className="flex flex-col h-full items-center justify-center p-4 pb-[80px]">
+      <div className="flex flex-col h-full items-center justify-center p-4 pb-[80px] relative">
         {pvpMode === 'MENU' && (
             <div className="w-full max-w-sm space-y-4">
                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 text-center">
@@ -337,9 +357,22 @@ const App: React.FC = () => {
             </div>
         )}
         {pvpMode === 'GAME' && (
-             <div className="flex flex-col items-center justify-center">
+             <div className="flex flex-col items-center justify-center relative w-full h-full">
                  <Coin flipping={isFlipping} result={activeRoom?.result || null} />
-                 {!isFlipping && <div className="text-3xl font-black text-white mt-8">{activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}</div>}
+                 {!isFlipping && !pvpResult && <div className="text-3xl font-black text-white mt-8">{activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}</div>}
+                 
+                 {/* RESULT OVERLAY */}
+                 {pvpResult && (
+                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
+                       {pvpResult === 'WIN' && <Confetti />}
+                       <div className={`text-6xl font-black mb-4 ${pvpResult === 'WIN' ? 'text-yellow-400 drop-shadow-[0_0_30px_rgba(250,204,21,0.6)]' : 'text-slate-500'} animate-bounce`}>
+                           {pvpResult === 'WIN' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ'}
+                       </div>
+                       <div className="text-white text-xl font-bold">
+                           {pvpResult === 'WIN' ? `+${Math.floor((activeRoom?.betAmount || 0) * 1.9)} ₽` : `-${activeRoom?.betAmount} ₽`}
+                       </div>
+                    </div>
+                 )}
              </div>
         )}
       </div>
