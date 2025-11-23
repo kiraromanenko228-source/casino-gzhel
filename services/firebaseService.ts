@@ -48,11 +48,7 @@ class FirebaseService {
 
   subscribeToLeaders(callback: (leaders: Leader[]) => void) {
     if (!this.db) {
-        // Return fake leaders if offline
-        callback([
-            { name: 'Магнат', balance: 1000000, avatar: 'rich' },
-            { name: 'Лаки', balance: 500000, avatar: 'lucky' }
-        ]);
+        callback([]);
         return () => {};
     }
 
@@ -72,9 +68,17 @@ class FirebaseService {
             avatar: u.avatar || 'default'
         }));
 
+        // FILTER OUT DEFAULT NAMES AND BOTS
+        const filteredLeaders = leaders.filter(l => 
+            l.name !== 'Игрок' && 
+            !l.name.toLowerCase().includes('player') && 
+            l.name !== 'Unknown' &&
+            l.balance > 0
+        );
+
         // Sort descending
-        leaders.sort((a, b) => b.balance - a.balance);
-        callback(leaders);
+        filteredLeaders.sort((a, b) => b.balance - a.balance);
+        callback(filteredLeaders);
     });
   }
 
