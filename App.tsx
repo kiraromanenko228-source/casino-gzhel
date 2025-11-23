@@ -24,8 +24,10 @@ import { soundManager } from './services/soundService';
 import { firebaseService } from './services/firebaseService';
 import { onValue } from 'firebase/database';
 
-// New storage key to force reset for all users
+// Key for saving player state
 const STORAGE_KEY = 'gzhel_player_reset_v1';
+// Key for tracking last server reset time
+const RESET_TIME_KEY = 'gzhel_last_reset_time';
 
 // --- ICONS ---
 const GameIcon = ({ active }: { active: boolean }) => (
@@ -293,6 +295,49 @@ const App: React.FC = () => {
 
     setIsLoaded(true);
   }, []);
+
+  // GLOBAL RESET HANDLER
+  useEffect(() => {
+      if (isLoaded) {
+          const unsub = firebaseService.subscribeToGlobalReset((serverResetTime) => {
+              const localResetTimeStr = localStorage.getItem(RESET_TIME_KEY);
+              const localResetTime = localResetTimeStr ? parseInt(localResetTimeStr) : 0;
+              
+              if (serverResetTime && serverResetTime > localResetTime) {
+                  console.log("Forced Global Reset Detected");
+                  
+                  // Reset player state to defaults
+                  const resetPlayer: Player = {
+                    id: player.id,
+                    name: player.name,
+                    balance: INITIAL_BALANCE,
+                    avatarSeed: player.avatarSeed,
+                    stats: { 
+                        totalWins: 0, 
+                        totalGames: 0, 
+                        currentWinStreak: 0, 
+                        maxWinStreak: 0, 
+                        maxBet: 0, 
+                        bonusStreak: 0 
+                    },
+                    achievements: []
+                  };
+                  
+                  setPlayer(resetPlayer);
+                  
+                  // Update storage markers
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(resetPlayer));
+                  localStorage.setItem(RESET_TIME_KEY, serverResetTime.toString());
+                  
+                  // Update Firebase
+                  firebaseService.updateUser(resetPlayer);
+                  
+                  alert('🔄 Сезон перезапущен администратором. Балансы сброшены.');
+              }
+          });
+          return () => unsub();
+      }
+  }, [isLoaded, player.id, player.name, player.avatarSeed]);
 
   // Sync House Bank (Only visible if Admin, but we can subscribe if admin)
   useEffect(() => {
