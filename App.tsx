@@ -7,7 +7,8 @@ import {
   Transaction,
   ChatMessage,
   Leader,
-  PvpRoom
+  PvpRoom,
+  PlayerStats
 } from './types';
 import { 
   INITIAL_BALANCE, 
@@ -44,6 +45,65 @@ const SettingsIcon = () => (
 );
 
 // --- HELPER COMPONENTS ---
+const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
+  const [progress, setProgress] = useState(0);
+  const [loadingText, setLoadingText] = useState('Инициализация...');
+
+  useEffect(() => {
+    const duration = 2500;
+    const intervalTime = 30;
+    const steps = duration / intervalTime;
+    let currentStep = 0;
+
+    const timer = setInterval(() => {
+      currentStep++;
+      const percent = Math.min(100, Math.floor((currentStep / steps) * 100));
+      setProgress(percent);
+
+      if (percent < 20) setLoadingText('Загрузка ресурсов...');
+      else if (percent < 40) setLoadingText('Синхронизация профиля...');
+      else if (percent < 60) setLoadingText('Прогрев монетки...');
+      else if (percent < 80) setLoadingText('Подключение к серверу...');
+      else if (percent < 95) setLoadingText('Полировка золота...');
+      else setLoadingText('Готово!');
+
+      if (currentStep >= steps) {
+        clearInterval(timer);
+        setTimeout(onComplete, 300);
+      }
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [onComplete]);
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center animate-fade-out">
+       <div className="relative w-full max-w-xs flex flex-col items-center">
+           <div className="w-32 h-32 rounded-full border-4 border-blue-900 bg-white flex items-center justify-center shadow-[0_0_50px_rgba(30,58,138,0.5)] animate-pulse-glow mb-10 relative">
+               <span className="text-6xl font-gzhel text-blue-900 animate-bounce">G</span>
+               <div className="absolute inset-0 rounded-full border-t-4 border-blue-500 animate-spin"></div>
+           </div>
+           
+           <h1 className="text-3xl font-gzhel text-white tracking-widest mb-2">GZHELCOIN</h1>
+           <p className="text-blue-400 text-xs uppercase tracking-[0.2em] mb-8">Casino Royale</p>
+
+           {/* Progress Bar */}
+           <div className="w-full bg-slate-800 rounded-full h-2 mb-2 overflow-hidden border border-slate-700">
+              <div 
+                className="bg-gradient-to-r from-blue-600 to-blue-400 h-full rounded-full transition-all duration-100 ease-out shadow-[0_0_10px_rgba(59,130,246,0.5)]" 
+                style={{ width: `${progress}%` }}
+              />
+           </div>
+           
+           <div className="flex justify-between w-full px-1">
+             <span className="text-slate-400 text-[10px] font-mono animate-pulse">{loadingText}</span>
+             <span className="text-blue-400 text-[10px] font-mono font-bold">{progress}%</span>
+           </div>
+       </div>
+    </div>
+  );
+};
+
 const AchievementToast = ({ achievement, visible }: { achievement: any, visible: boolean }) => {
   if (!achievement) return null;
   return (
@@ -79,6 +139,7 @@ const Confetti = () => {
 };
 
 const App: React.FC = () => {
+  const [showSplash, setShowSplash] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>(Tab.GAME);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -93,6 +154,9 @@ const App: React.FC = () => {
     stats: { totalWins: 0, totalGames: 0, currentWinStreak: 0, maxWinStreak: 0, maxBet: 0, bonusStreak: 0 },
     achievements: []
   });
+  
+  const [activeAchievement, setActiveAchievement] = useState<any>(null);
+  const [showAchievement, setShowAchievement] = useState(false);
 
   const [houseBank, setHouseBank] = useState<number>(0);
   const [betAmount, setBetAmount] = useState<string>('100');
@@ -100,7 +164,12 @@ const App: React.FC = () => {
   const [flipResult, setFlipResult] = useState<CoinSide | null>(null);
   const [selectedSide, setSelectedSide] = useState<CoinSide | null>(null);
   const [flipCount, setFlipCount] = useState(0); 
-  const [newAchievement, setNewAchievement] = useState<any>(null);
+  
+  // Single Player Result Animations
+  const [showSingleWin, setShowSingleWin] = useState(false);
+  const [singleWinAmount, setSingleWinAmount] = useState(0);
+  const [showSingleLoss, setShowSingleLoss] = useState(false);
+  const [singleLossAmount, setSingleLossAmount] = useState(0);
 
   // Online State
   const [pvpMode, setPvpMode] = useState<'MENU' | 'CREATE' | 'JOIN' | 'LOBBY' | 'GAME'>('MENU');
@@ -128,7 +197,6 @@ const App: React.FC = () => {
       window.Telegram.WebApp.expand();
       const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
       if (tgUser) {
-        // String conversion is crucial for reliable ID checking
         if (String(tgUser.id) === String(ADMIN_TELEGRAM_ID)) setIsAdmin(true);
         setPlayer(prev => ({
            ...prev,
@@ -179,7 +247,6 @@ const App: React.FC = () => {
     if (!isLoaded) return;
     localStorage.setItem('gzhel_player', JSON.stringify(player));
     localStorage.setItem('gzhel_bank', houseBank.toString());
-    // Sync balance to Firebase for leaderboard
     if (firebaseService.isOnline) {
         firebaseService.updateUser(player);
     }
@@ -193,6 +260,26 @@ const App: React.FC = () => {
     }
   };
 
+  const checkAchievements = (newPlayer: Player) => {
+     let updatedPlayer = { ...newPlayer };
+     let achievementUnlocked = false;
+
+     ACHIEVEMENTS_LIST.forEach(ach => {
+         if (!updatedPlayer.achievements.includes(ach.id) && ach.condition(updatedPlayer)) {
+             updatedPlayer.achievements.push(ach.id);
+             setActiveAchievement(ach);
+             setShowAchievement(true);
+             achievementUnlocked = true;
+             setTimeout(() => setShowAchievement(false), 4000);
+             soundManager.play('MATCH_FOUND'); // Use chime for achievement
+         }
+     });
+
+     if (achievementUnlocked) {
+         setPlayer(updatedPlayer);
+     }
+  };
+
   const getBetValue = () => parseInt(betAmount) || 0;
 
   const handleFlip = (side: CoinSide) => {
@@ -200,30 +287,65 @@ const App: React.FC = () => {
     if (isFlipping) return;
     if (bet > player.balance || bet < MIN_BET) { soundManager.play('ERROR'); return; }
 
+    setShowSingleWin(false);
+    setShowSingleLoss(false);
+
     haptic('impact');
     setIsFlipping(true);
     setSelectedSide(side);
     setFlipCount(c => c + 1);
 
-    // Simple Logic for demo
-    const isWin = Math.random() < 0.48; // Slight House Edge
+    // Rigging Logic
+    let winChance = 0.48; // Default house edge
+    // High stakes punishment
+    if (bet > player.balance * 0.3) winChance = 0.35;
+    // Streak breaker
+    if (player.stats.currentWinStreak >= 3) winChance = 0.20;
+    // Mercy rule
+    if (player.balance < 200 && bet < 50) winChance = 0.75;
+
+    const isWin = Math.random() < winChance;
     const resultSide = isWin ? side : (side === CoinSide.HEADS ? CoinSide.TAILS : CoinSide.HEADS);
     setFlipResult(resultSide);
 
     setTimeout(() => {
       soundManager.play('COIN_LAND');
+      let newPlayer = { ...player };
+      
       if (isWin) {
           const profit = Math.floor(bet * WIN_COEFFICIENT) - bet;
-          setPlayer(p => ({ ...p, balance: p.balance + profit, stats: {...p.stats, totalWins: p.stats.totalWins + 1} }));
-          setHouseBank(b => b - profit);
+          newPlayer.balance += profit;
+          newPlayer.stats.totalWins += 1;
+          newPlayer.stats.currentWinStreak += 1;
+          newPlayer.stats.maxWinStreak = Math.max(newPlayer.stats.maxWinStreak, newPlayer.stats.currentWinStreak);
+          
+          setHouseBank(b => b - profit); 
           soundManager.play('WIN');
           haptic('notification');
+          setSingleWinAmount(profit);
+          setShowSingleWin(true);
       } else {
-          setPlayer(p => ({ ...p, balance: p.balance - bet }));
+          newPlayer.balance -= bet;
+          newPlayer.stats.currentWinStreak = 0;
+          
           setHouseBank(b => b + bet);
           soundManager.play('LOSE');
           haptic('error');
+          setSingleLossAmount(bet);
+          setShowSingleLoss(true);
       }
+      
+      newPlayer.stats.totalGames += 1;
+      newPlayer.stats.maxBet = Math.max(newPlayer.stats.maxBet, bet);
+      
+      setPlayer(newPlayer);
+      checkAchievements(newPlayer);
+
+      setTimeout(() => {
+          setShowSingleWin(false);
+          setShowSingleLoss(false);
+      }, 2500);
+
       setIsFlipping(false);
     }, ANIMATION_DURATION_MS);
   };
@@ -257,7 +379,6 @@ const App: React.FC = () => {
               if (roomData.status === 'FLIPPING') { setPvpMode('GAME'); setFlipCount(c => c+1); setIsFlipping(true); }
               if (roomData.status === 'FINISHED') { setIsFlipping(false); resolvePvpGame(roomData, roomData.hostId === player.id); unsub(); }
           } else {
-              // Room deleted or invalid
               setPvpMode('MENU');
               unsub();
           }
@@ -267,7 +388,6 @@ const App: React.FC = () => {
   const handleCancelRoom = () => {
       if (activeRoom && activeRoom.hostId === player.id) {
           firebaseService.cancelRoom(activeRoom.id);
-          // Return money
           setPlayer(p => ({ ...p, balance: p.balance + activeRoom.betAmount }));
           setPvpMode('MENU');
           setActiveRoom(null);
@@ -277,24 +397,40 @@ const App: React.FC = () => {
   const resolvePvpGame = (room: PvpRoom, isHost: boolean) => {
       const didHostWin = room.result === room.selectedSide;
       const didIWin = isHost ? didHostWin : !didHostWin;
+      const totalPot = room.betAmount * 2;
+      const rake = totalPot * 0.10; 
+      
+      setHouseBank(b => b + rake);
+
+      let newPlayer = { ...player };
+
       if (didIWin) {
-          const winAmount = (room.betAmount * 2) * 0.95;
-          setPlayer(p => ({...p, balance: p.balance + winAmount}));
+          const winAmount = (room.betAmount * 2) * 0.95; 
+          newPlayer.balance += winAmount;
+          newPlayer.stats.totalWins += 1;
+          newPlayer.stats.currentWinStreak += 1;
+          
+          setPlayer(newPlayer);
           soundManager.play('WIN');
           setPvpResult('WIN');
       } else {
+          newPlayer.stats.currentWinStreak = 0;
+          setPlayer(newPlayer);
           soundManager.play('LOSE');
           setPvpResult('LOSS');
       }
+      
+      checkAchievements(newPlayer);
+
       setTimeout(() => { 
           setPvpMode('MENU'); 
           setActiveRoom(null); 
           setPvpResult(null);
-      }, 5000); // 5 seconds to enjoy the victory screen
+      }, 5000);
   };
 
   const renderGameTab = () => (
-    <div className="flex flex-col h-full p-2 overflow-y-auto no-scrollbar pb-[80px]">
+    <div className="flex flex-col h-full p-2 overflow-y-auto no-scrollbar pb-[80px] relative">
       <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 flex justify-between items-center mb-4 shrink-0">
           <div>
             <div className="text-slate-500 text-[10px] uppercase font-bold">Баланс</div>
@@ -303,6 +439,30 @@ const App: React.FC = () => {
           <button onClick={() => setPlayer(p => ({...p, balance: p.balance + 100}))} className="bg-blue-900/50 text-blue-300 px-3 py-1 rounded-full text-xs font-bold">+100</button>
       </div>
       <div className="flex-1 flex flex-col items-center justify-center relative min-h-[250px]">
+        {/* WIN OVERLAY */}
+        {showSingleWin && (
+           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center animate-pop-in pointer-events-none backdrop-blur-sm bg-black/20">
+              <Confetti />
+              <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 drop-shadow-[0_0_20px_rgba(234,179,8,1)]">
+                  ПОБЕДА
+              </div>
+              <div className="text-4xl font-mono text-green-400 font-bold mt-2 text-shadow">
+                  +{singleWinAmount.toLocaleString()} ₽
+              </div>
+           </div>
+        )}
+        {/* LOSS OVERLAY */}
+        {showSingleLoss && (
+           <div className="absolute inset-0 z-20 flex flex-col items-center justify-center animate-shake pointer-events-none backdrop-blur-sm bg-red-900/10">
+              <div className="text-6xl font-black text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.8)]">
+                  💔
+              </div>
+              <div className="text-4xl font-mono text-red-500 font-bold mt-2">
+                  -{singleLossAmount.toLocaleString()} ₽
+              </div>
+           </div>
+        )}
+
         <Coin key={flipCount} flipping={isFlipping} result={flipResult} />
       </div>
       <div className="bg-slate-900/90 rounded-2xl border border-slate-800 p-4 mt-auto shrink-0">
@@ -321,16 +481,24 @@ const App: React.FC = () => {
   const renderLeadersTab = () => (
     <div className="flex flex-col h-full p-4 overflow-y-auto pb-[80px]">
        <h2 className="text-2xl font-gzhel text-white mb-6">Топ Игроков</h2>
-       <div className="space-y-3">
-          {leaders.map((leader, idx) => (
-             <div key={idx} className="flex items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
-                <div className={`w-8 h-8 flex items-center justify-center font-black rounded-full mr-3 ${idx === 0 ? 'bg-yellow-500 text-black' : idx === 1 ? 'bg-slate-400 text-black' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-500'}`}>{idx + 1}</div>
-                <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${leader.avatar}`} className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 mr-3" />
-                <div className="flex-1 font-bold text-white">{leader.name}</div>
-                <div className="font-mono text-blue-400">{leader.balance.toLocaleString()} ₽</div>
-             </div>
-          ))}
-       </div>
+       {leaders.length === 0 ? (
+           <div className="flex flex-col items-center justify-center h-[300px] text-slate-500">
+               <div className="text-4xl mb-2">🏆</div>
+               <div>Список пуст</div>
+               <div className="text-xs">Играйте в PvP, чтобы попасть сюда!</div>
+           </div>
+       ) : (
+           <div className="space-y-3">
+              {leaders.map((leader, idx) => (
+                 <div key={idx} className="flex items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                    <div className={`w-8 h-8 flex items-center justify-center font-black rounded-full mr-3 ${idx === 0 ? 'bg-yellow-500 text-black' : idx === 1 ? 'bg-slate-400 text-black' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-800 text-slate-500'}`}>{idx + 1}</div>
+                    <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${leader.avatar}`} className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 mr-3" />
+                    <div className="flex-1 font-bold text-white">{leader.name}</div>
+                    <div className="font-mono text-blue-400">{leader.balance.toLocaleString()} ₽</div>
+                 </div>
+              ))}
+           </div>
+       )}
     </div>
   );
 
@@ -355,11 +523,8 @@ const App: React.FC = () => {
   );
   
   const renderMultiplayerTab = () => {
-    // Helper to calculate win amounts for display
     const potentialWin = Math.floor((activeRoom?.betAmount || 0) * 1.9);
     const lossAmount = activeRoom?.betAmount || 0;
-    
-    // Determine opponent info for Result Screen
     const isHost = activeRoom?.hostId === player.id;
     const opponentName = isHost ? activeRoom?.guestName : activeRoom?.hostName;
     const opponentAvatar = isHost ? activeRoom?.guestAvatar : activeRoom?.hostAvatar;
@@ -414,7 +579,6 @@ const App: React.FC = () => {
                     <div className="flex flex-col items-center relative">
                         <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom?.hostAvatar}`} className="w-20 h-20 rounded-full border-4 border-blue-500 bg-slate-900 shadow-[0_0_30px_rgba(59,130,246,0.5)]"/>
                         <div className="mt-3 font-bold text-white">{activeRoom?.hostName}</div>
-                        {activeRoom?.hostId === player.id && <div className="absolute -top-2 -right-2 bg-blue-600 text-[10px] px-2 py-1 rounded text-white font-bold">ВЫ</div>}
                     </div>
                     <div className="text-4xl font-black text-slate-700 italic">VS</div>
                     <div className="flex flex-col items-center relative">
@@ -422,7 +586,6 @@ const App: React.FC = () => {
                             <>
                              <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${activeRoom.guestAvatar}`} className="w-20 h-20 rounded-full border-4 border-red-500 bg-slate-900 shadow-[0_0_30px_rgba(239,68,68,0.5)] animate-pop-in"/>
                              <div className="mt-3 font-bold text-white">{activeRoom.guestName}</div>
-                             {activeRoom?.guestId === player.id && <div className="absolute -top-2 -right-2 bg-blue-600 text-[10px] px-2 py-1 rounded text-white font-bold">ВЫ</div>}
                             </>
                         ) : (
                             <div className="w-20 h-20 rounded-full border-4 border-dashed border-slate-700 flex items-center justify-center animate-pulse bg-slate-900">
@@ -432,7 +595,6 @@ const App: React.FC = () => {
                     </div>
                 </div>
 
-                {/* GAME CONTROLS FOR HOST */}
                 {activeRoom?.hostId === player.id && activeRoom?.guestId && (
                     <div className="animate-fade-in-up w-full max-w-xs">
                         <div className="text-center text-slate-400 text-xs mb-4">Выберите сторону, чтобы начать</div>
@@ -443,7 +605,6 @@ const App: React.FC = () => {
                     </div>
                 )}
 
-                {/* CANCEL BUTTON FOR HOST IF WAITING */}
                 {activeRoom?.hostId === player.id && !activeRoom?.guestId && (
                      <button onClick={handleCancelRoom} className="mt-8 text-red-500 text-sm border border-red-900/50 px-4 py-2 rounded-lg hover:bg-red-900/20">Отменить игру</button>
                 )}
@@ -452,24 +613,20 @@ const App: React.FC = () => {
         {pvpMode === 'GAME' && (
              <div className="flex flex-col items-center justify-center relative w-full h-full">
                  <Coin flipping={isFlipping} result={activeRoom?.result || null} />
-                 {!isFlipping && !pvpResult && <div className="text-3xl font-black text-white mt-8">{activeRoom?.result === CoinSide.HEADS ? 'ОРЁЛ' : 'РЕШКА'}</div>}
                  
                  {/* SPECTACULAR RESULT OVERLAY */}
                  {pvpResult && (
                     <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/90 animate-fade-in backdrop-blur-md">
-                       {/* Background Burst */}
                        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black pointer-events-none"></div>
                        {pvpResult === 'WIN' && <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-yellow-500/20 via-transparent to-transparent animate-pulse-glow pointer-events-none"></div>}
                        {pvpResult === 'WIN' && <Confetti />}
 
-                       {/* Content */}
                        <div className="z-10 flex flex-col items-center animate-pop-in">
                            <div className={`text-6xl md:text-8xl font-black mb-6 tracking-tighter ${pvpResult === 'WIN' ? 'text-transparent bg-clip-text bg-gradient-to-b from-yellow-300 to-yellow-600 drop-shadow-[0_0_25px_rgba(234,179,8,0.8)]' : 'text-slate-500'}`}>
                                {pvpResult === 'WIN' ? 'ПОБЕДА!' : 'ПОРАЖЕНИЕ'}
                            </div>
 
                            <div className="flex items-center gap-8 mb-8">
-                               {/* My Avatar */}
                                <div className="flex flex-col items-center">
                                    <div className={`relative p-1 rounded-full ${pvpResult === 'WIN' ? 'bg-gradient-to-tr from-yellow-400 to-yellow-600 animate-pulse-glow shadow-[0_0_30px_rgba(234,179,8,0.6)]' : 'bg-slate-700 grayscale opacity-70'}`}>
                                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${player.avatarSeed}`} className="w-20 h-20 rounded-full bg-slate-900" />
@@ -480,7 +637,6 @@ const App: React.FC = () => {
 
                                <div className="text-2xl font-black text-slate-600">VS</div>
 
-                               {/* Opponent Avatar */}
                                <div className="flex flex-col items-center">
                                    <div className={`relative p-1 rounded-full ${pvpResult === 'LOSS' ? 'bg-gradient-to-tr from-yellow-400 to-yellow-600 shadow-[0_0_30px_rgba(234,179,8,0.6)]' : 'bg-slate-700 grayscale opacity-70'}`}>
                                        <img src={`https://api.dicebear.com/7.x/bottts/svg?seed=${opponentAvatar}`} className="w-20 h-20 rounded-full bg-slate-900" />
@@ -510,7 +666,6 @@ const App: React.FC = () => {
           <div className="text-blue-400 font-mono text-xl">{player.balance.toLocaleString()} ₽</div>
        </div>
        
-       {/* CASINO BANK (ADMIN ONLY) */}
        {isAdmin && (
            <div className="bg-slate-950 p-4 rounded-2xl border border-red-900/50 mb-4">
               <div className="text-red-500 text-xs font-bold uppercase tracking-widest mb-1 flex items-center gap-2">
@@ -526,7 +681,6 @@ const App: React.FC = () => {
            </div>
        )}
 
-       {/* Achievements */}
        <div className="space-y-2">
           {ACHIEVEMENTS_LIST.map(ach => {
               const unlocked = player.achievements.includes(ach.id);
@@ -546,6 +700,9 @@ const App: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[100dvh] w-full bg-[#020617]" onClick={handleGlobalClick}>
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
+      <AchievementToast achievement={activeAchievement} visible={showAchievement} />
+      
       {showSettings && (
           <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
               <div className="bg-slate-900 border border-slate-700 w-full max-w-xs rounded-2xl p-6">
