@@ -48,8 +48,25 @@ const SettingsIcon = () => (
 const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
   const [progress, setProgress] = useState(0);
   const [loadingText, setLoadingText] = useState('Инициализация...');
+  const [needsInteraction, setNeedsInteraction] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
+    // Play splash music
+    const audio = new Audio(SOUNDS.LOADING);
+    audio.volume = 0.5;
+    audio.loop = true;
+    audioRef.current = audio;
+    
+    // Attempt to play
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.log("Auto-play prevented (normal behavior for some browsers):", error);
+        setNeedsInteraction(true);
+      });
+    }
+
     const duration = 2500;
     const intervalTime = 30;
     const steps = duration / intervalTime;
@@ -69,15 +86,38 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
 
       if (currentStep >= steps) {
         clearInterval(timer);
-        setTimeout(onComplete, 300);
+        setTimeout(() => {
+          // Fade out music and stop
+          let fade = setInterval(() => {
+             if (audio.volume > 0.1) {
+                audio.volume -= 0.1;
+             } else {
+                clearInterval(fade);
+                audio.pause();
+                onComplete();
+             }
+          }, 100);
+        }, 300);
       }
     }, intervalTime);
 
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      audio.pause();
+    };
   }, [onComplete]);
 
+  const handleInteraction = () => {
+    if (needsInteraction && audioRef.current) {
+        audioRef.current.play().then(() => setNeedsInteraction(false)).catch(console.error);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center animate-fade-out">
+    <div 
+      className="fixed inset-0 z-[100] bg-[#020617] flex flex-col items-center justify-center animate-fade-out cursor-pointer"
+      onClick={handleInteraction}
+    >
        <div className="relative w-full max-w-xs flex flex-col items-center">
            <div className="w-32 h-32 rounded-full border-4 border-blue-900 bg-white flex items-center justify-center shadow-[0_0_50px_rgba(30,58,138,0.5)] animate-pulse-glow mb-10 relative">
                <span className="text-6xl font-gzhel text-blue-900 animate-bounce">G</span>
@@ -99,6 +139,12 @@ const SplashScreen = ({ onComplete }: { onComplete: () => void }) => {
              <span className="text-slate-400 text-[10px] font-mono animate-pulse">{loadingText}</span>
              <span className="text-blue-400 text-[10px] font-mono font-bold">{progress}%</span>
            </div>
+
+           {needsInteraction && (
+               <div className="mt-8 animate-bounce text-yellow-500 font-bold text-sm bg-yellow-500/10 px-4 py-2 rounded-full border border-yellow-500/30">
+                   🔈 Нажми на экран чтобы включить звук
+               </div>
+           )}
        </div>
     </div>
   );
@@ -209,9 +255,7 @@ const App: React.FC = () => {
     
     // 3. LOAD LOCAL DATA
     const savedPlayer = localStorage.getItem('gzhel_player');
-    const savedBank = localStorage.getItem('gzhel_bank');
     if (savedPlayer) setPlayer(JSON.parse(savedPlayer));
-    if (savedBank) setHouseBank(parseFloat(savedBank));
     
     // 4. CHAT SYNC
     if (firebaseService.isOnline) {
@@ -242,15 +286,24 @@ const App: React.FC = () => {
     setIsLoaded(true);
   }, []);
 
+  // Sync House Bank (Only visible if Admin, but we can subscribe if admin)
+  useEffect(() => {
+    if (isAdmin && isLoaded) {
+      const unsub = firebaseService.subscribeToHouseBank((amount) => {
+        setHouseBank(amount);
+      });
+      return () => unsub();
+    }
+  }, [isAdmin, isLoaded]);
+
   // Save State
   useEffect(() => {
     if (!isLoaded) return;
     localStorage.setItem('gzhel_player', JSON.stringify(player));
-    localStorage.setItem('gzhel_bank', houseBank.toString());
     if (firebaseService.isOnline) {
         firebaseService.updateUser(player);
     }
-  }, [player, houseBank, isLoaded]);
+  }, [player, isLoaded]);
 
   const haptic = (type: 'impact' | 'notification' | 'error') => {
     if (window.Telegram?.WebApp?.HapticFeedback) {
@@ -319,7 +372,9 @@ const App: React.FC = () => {
           newPlayer.stats.currentWinStreak += 1;
           newPlayer.stats.maxWinStreak = Math.max(newPlayer.stats.maxWinStreak, newPlayer.stats.currentWinStreak);
           
-          setHouseBank(b => b - profit); 
+          // House loses money (profit paid to player)
+          firebaseService.updateHouseBank(-profit);
+
           soundManager.play('WIN');
           haptic('notification');
           setSingleWinAmount(profit);
@@ -328,7 +383,9 @@ const App: React.FC = () => {
           newPlayer.balance -= bet;
           newPlayer.stats.currentWinStreak = 0;
           
-          setHouseBank(b => b + bet);
+          // House wins money (bet amount)
+          firebaseService.updateHouseBank(bet);
+
           soundManager.play('LOSE');
           haptic('error');
           setSingleLossAmount(bet);
@@ -400,7 +457,8 @@ const App: React.FC = () => {
       const totalPot = room.betAmount * 2;
       const rake = totalPot * 0.10; 
       
-      setHouseBank(b => b + rake);
+      // Add rake to global bank
+      firebaseService.updateHouseBank(rake);
 
       let newPlayer = { ...player };
 
@@ -673,10 +731,11 @@ const App: React.FC = () => {
               </div>
               <div className="flex justify-between items-end">
                  <div>
-                    <div className="text-slate-400 text-xs">Банк Казино</div>
+                    <div className="text-slate-400 text-xs">Банк Казино (Global)</div>
                     <div className="text-2xl font-black text-white">{houseBank.toLocaleString()} ₽</div>
                  </div>
-                 <button onClick={() => setHouseBank(0)} className="text-xs text-red-500 border border-red-900 px-2 py-1 rounded">Сброс</button>
+                 {/* Only admin can reset, but this updates firebase global value */}
+                 <button onClick={() => firebaseService.updateHouseBank(-houseBank)} className="text-xs text-red-500 border border-red-900 px-2 py-1 rounded">Сброс</button>
               </div>
            </div>
        )}
