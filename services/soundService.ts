@@ -1,4 +1,3 @@
-
 import { SOUNDS } from '../constants';
 
 class SoundManager {
@@ -9,7 +8,6 @@ class SoundManager {
 
   constructor() {
     try {
-      // Initialize AudioContext if supported
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       if (AudioContextClass) {
         this.context = new AudioContextClass();
@@ -19,10 +17,8 @@ class SoundManager {
     }
   }
 
-  // Preload all sounds
   async loadAll() {
     if (!this.context) return;
-
     const promises = Object.entries(SOUNDS).map(async ([key, url]) => {
       try {
         const response = await fetch(url);
@@ -33,45 +29,43 @@ class SoundManager {
         console.warn(`Failed to load sound ${key}:`, e);
       }
     });
-
     await Promise.all(promises);
   }
 
-  // Must be called on first user interaction (click/touch)
   unlockAudio() {
-    if (!this.context || this.isUnlocked) return;
-
-    // Resume context if suspended (Chrome/iOS policy)
+    if (!this.context) return;
+    // Always try to resume if suspended (common in Telegram WebApp)
     if (this.context.state === 'suspended') {
       this.context.resume().then(() => {
         this.isUnlocked = true;
       });
-    } else {
-        this.isUnlocked = true;
     }
+    if (this.isUnlocked) return;
     
-    // Play a silent buffer to fully unlock iOS
+    // Play silent buffer
     const buffer = this.context.createBuffer(1, 1, 22050);
     const source = this.context.createBufferSource();
     source.buffer = buffer;
     source.connect(this.context.destination);
     source.start(0);
+    this.isUnlocked = true;
   }
 
   play(key: keyof typeof SOUNDS) {
     if (!this.context || !this.buffers.has(key)) return;
+    
+    // Ensure context is running before playing
+    if (this.context.state === 'suspended') {
+        this.context.resume();
+    }
 
     try {
         const source = this.context.createBufferSource();
         source.buffer = this.buffers.get(key)!;
-        
-        // Create gain node for volume
         const gainNode = this.context.createGain();
         gainNode.gain.value = this.volume;
-        
         source.connect(gainNode);
         gainNode.connect(this.context.destination);
-        
         source.start(0);
     } catch(e) {
         console.warn("Error playing sound", e);
