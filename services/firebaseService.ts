@@ -10,7 +10,8 @@ import {
   query,
   orderByChild,
   limitToLast,
-  remove
+  remove,
+  runTransaction
 } from 'firebase/database';
 import { FIREBASE_CONFIG } from '../constants';
 import { ChatMessage, PvpRoom, Player, CoinSide, Leader } from '../types';
@@ -79,6 +80,26 @@ class FirebaseService {
         // Sort descending
         filteredLeaders.sort((a, b) => b.balance - a.balance);
         callback(filteredLeaders);
+    });
+  }
+
+  // --- GLOBAL CASINO BANK ---
+  // Adds (or subtracts if negative) amount to the global bank
+  updateHouseBank(amount: number) {
+    if (!this.db) return;
+    const bankRef = ref(this.db, 'system/bank');
+    runTransaction(bankRef, (currentBank) => {
+      // Initialize to 0 if null, then add amount
+      return (currentBank || 0) + amount;
+    }).catch(err => console.error("Bank Transaction Failed", err));
+  }
+
+  // Listen to the global bank value (For Admin UI)
+  subscribeToHouseBank(callback: (amount: number) => void) {
+    if (!this.db) return () => {};
+    const bankRef = ref(this.db, 'system/bank');
+    return onValue(bankRef, (snapshot) => {
+      callback(snapshot.val() || 0);
     });
   }
 
