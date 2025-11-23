@@ -50,7 +50,10 @@ export const SOUNDS = {
   ERROR: 'https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/missile.mp3',
   
   // Match Found
-  MATCH_FOUND: 'https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a'
+  MATCH_FOUND: 'https://commondatastorage.googleapis.com/codeskulptor-assets/week7-brrring.m4a',
+
+  // Splash Screen Music (Jazzy/Lounge Loading Loop)
+  LOADING: 'https://codeskulptor-demos.commondatastorage.googleapis.com/pang/paza-moduless.mp3'
 };
 
 export const ACHIEVEMENTS_LIST = [
