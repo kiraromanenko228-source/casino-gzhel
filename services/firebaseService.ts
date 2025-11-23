@@ -36,6 +36,20 @@ class FirebaseService {
     return this.isInitialized;
   }
 
+  // --- ADMIN TOOLS ---
+  async resetGlobalState() {
+    if (!this.db) return;
+    try {
+      await set(ref(this.db, 'users'), null); // Wipe all users
+      await set(ref(this.db, 'rooms'), null); // Wipe all rooms
+      await set(ref(this.db, 'chat'), null);  // Wipe chat
+      await set(ref(this.db, 'system/bank'), 0); // Reset bank
+      console.log("Global State Reset Complete");
+    } catch (e) {
+      console.error("Reset failed", e);
+    }
+  }
+
   // --- USER SYNC & LEADERS ---
   updateUser(player: Player) {
     if (!this.db) return;
