@@ -44,10 +44,23 @@ class FirebaseService {
       await set(ref(this.db, 'rooms'), null); // Wipe all rooms
       await set(ref(this.db, 'chat'), null);  // Wipe chat
       await set(ref(this.db, 'system/bank'), 0); // Reset bank
+      
+      // Update reset timestamp to force clients to clear local storage
+      await set(ref(this.db, 'system/resetTimestamp'), Date.now());
+      
       console.log("Global State Reset Complete");
     } catch (e) {
       console.error("Reset failed", e);
     }
+  }
+  
+  // Subscribe to global reset signal
+  subscribeToGlobalReset(callback: (timestamp: number) => void) {
+      if (!this.db) return () => {};
+      const resetRef = ref(this.db, 'system/resetTimestamp');
+      return onValue(resetRef, (snapshot) => {
+          callback(snapshot.val() || 0);
+      });
   }
 
   // --- USER SYNC & LEADERS ---
