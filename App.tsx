@@ -24,6 +24,9 @@ import { soundManager } from './services/soundService';
 import { firebaseService } from './services/firebaseService';
 import { onValue } from 'firebase/database';
 
+// New storage key to force reset for all users
+const STORAGE_KEY = 'gzhel_player_reset_v1';
+
 // --- ICONS ---
 const GameIcon = ({ active }: { active: boolean }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill={active ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v8"/><path d="M8 12h8"/></svg>
@@ -254,8 +257,13 @@ const App: React.FC = () => {
     }
     
     // 3. LOAD LOCAL DATA
-    const savedPlayer = localStorage.getItem('gzhel_player');
-    if (savedPlayer) setPlayer(JSON.parse(savedPlayer));
+    const savedPlayer = localStorage.getItem(STORAGE_KEY);
+    if (savedPlayer) {
+      setPlayer(JSON.parse(savedPlayer));
+    } else {
+      // New user or Reset detected
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(player));
+    }
     
     // 4. CHAT SYNC
     if (firebaseService.isOnline) {
@@ -299,7 +307,7 @@ const App: React.FC = () => {
   // Save State
   useEffect(() => {
     if (!isLoaded) return;
-    localStorage.setItem('gzhel_player', JSON.stringify(player));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(player));
     if (firebaseService.isOnline) {
         firebaseService.updateUser(player);
     }
@@ -455,10 +463,15 @@ const App: React.FC = () => {
       const didHostWin = room.result === room.selectedSide;
       const didIWin = isHost ? didHostWin : !didHostWin;
       
-      // FIX: Rake is 0.1 of the BET amount (Difference between 2.0x Pot and 1.9x Payout)
-      const rake = room.betAmount * 0.1; 
+      // CORRECT LOGIC FOR CASINO BANK
+      // Pot = Bet * 2 (Both players)
+      // Winner gets = Bet * 1.9
+      // Rake = Pot - Winner Payout
+      const totalPot = room.betAmount * 2;
+      const winAmount = Math.floor(room.betAmount * WIN_COEFFICIENT);
+      const rake = totalPot - winAmount;
       
-      // FIX: Only Host updates the bank to avoid double counting from both clients
+      // Only Host updates the bank to avoid double counting from both clients
       if (isHost) {
         firebaseService.updateHouseBank(rake);
       }
@@ -466,7 +479,6 @@ const App: React.FC = () => {
       let newPlayer = { ...player };
 
       if (didIWin) {
-          const winAmount = room.betAmount * 1.9; 
           newPlayer.balance += winAmount;
           newPlayer.stats.totalWins += 1;
           newPlayer.stats.currentWinStreak += 1;
@@ -488,6 +500,16 @@ const App: React.FC = () => {
           setActiveRoom(null); 
           setPvpResult(null);
       }, 5000);
+  };
+
+  // ADMIN RESET
+  const handleAdminReset = async () => {
+    if(confirm('ВНИМАНИЕ! Вы собираетесь удалить всех пользователей и обнулить базу данных. Вы уверены?')) {
+      await firebaseService.resetGlobalState();
+      alert('База данных очищена. Перезагрузите приложение.');
+      // Force reload to reset local state for admin too
+      window.location.reload();
+    }
   };
 
   const renderGameTab = () => (
@@ -728,17 +750,27 @@ const App: React.FC = () => {
        </div>
        
        {isAdmin && (
-           <div className="bg-slate-950 p-4 rounded-2xl border border-red-900/50 mb-4">
+           <div className="bg-slate-950 p-4 rounded-2xl border border-red-900/50 mb-4 space-y-4">
               <div className="text-red-500 text-xs font-bold uppercase tracking-widest mb-1 flex items-center gap-2">
                  <span>🔒 АДМИН ПАНЕЛЬ</span>
               </div>
-              <div className="flex justify-between items-end">
+              <div className="flex justify-between items-end border-b border-slate-800 pb-2">
                  <div>
                     <div className="text-slate-400 text-xs">Банк Казино (Global)</div>
                     <div className="text-2xl font-black text-white">{houseBank.toLocaleString()} ₽</div>
                  </div>
                  {/* Only admin can reset, but this updates firebase global value */}
-                 <button onClick={() => firebaseService.updateHouseBank(-houseBank)} className="text-xs text-red-500 border border-red-900 px-2 py-1 rounded">Сброс</button>
+                 <button onClick={() => firebaseService.updateHouseBank(-houseBank)} className="text-xs text-red-500 border border-red-900 px-2 py-1 rounded">Сброс Банка</button>
+              </div>
+              
+              <div>
+                  <button 
+                    onClick={handleAdminReset}
+                    className="w-full bg-red-900/20 border border-red-900 text-red-500 py-3 rounded-xl font-bold hover:bg-red-900/40 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>☢️</span> СБРОСИТЬ БАЗУ ДАННЫХ
+                  </button>
+                  <p className="text-[10px] text-slate-500 mt-1 text-center">Удаляет всех пользователей, чат и историю игр</p>
               </div>
            </div>
        )}
