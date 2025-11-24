@@ -17,7 +17,8 @@ import {
   ANIMATION_DURATION_MS,
   SOUNDS,
   ACHIEVEMENTS_LIST,
-  ADMIN_TELEGRAM_ID
+  ADMIN_TELEGRAM_ID,
+  DAILY_BONUS_AMOUNT
 } from './constants';
 import { Coin } from './components/Coin';
 import { soundManager } from './services/soundService';
@@ -388,6 +389,34 @@ const App: React.FC = () => {
 
   const getBetValue = () => parseInt(betAmount) || 0;
 
+  const handleClaimBonus = () => {
+    const now = Date.now();
+    const lastClaim = player.lastBonusClaim || 0;
+    const cooldown = 24 * 60 * 60 * 1000; // 24 hours
+
+    if (now - lastClaim < cooldown) {
+      const remaining = cooldown - (now - lastClaim);
+      const hours = Math.floor(remaining / (1000 * 60 * 60));
+      const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      alert(`⏳ Бонус будет доступен через ${hours}ч ${minutes}м`);
+      return;
+    }
+
+    // Claim Logic
+    const newPlayer = {
+      ...player,
+      balance: player.balance + DAILY_BONUS_AMOUNT,
+      lastBonusClaim: now
+    };
+    setPlayer(newPlayer);
+    
+    // Deduct from Casino Bank (House loses money)
+    firebaseService.updateHouseBank(-DAILY_BONUS_AMOUNT);
+    
+    soundManager.play('MATCH_FOUND');
+    alert(`🎁 Вы получили ежедневный бонус ${DAILY_BONUS_AMOUNT} ₽!`);
+  };
+
   const handleFlip = (side: CoinSide) => {
     const bet = getBetValue();
     if (isFlipping) return;
@@ -557,14 +586,23 @@ const App: React.FC = () => {
     }
   };
 
-  const renderGameTab = () => (
+  const renderGameTab = () => {
+    // Check daily bonus eligibility
+    const canClaimBonus = Date.now() - (player.lastBonusClaim || 0) >= 24 * 60 * 60 * 1000;
+
+    return (
     <div className="flex flex-col h-full p-2 overflow-y-auto no-scrollbar pb-[80px] relative">
       <div className="bg-slate-900 rounded-2xl p-4 border border-slate-800 flex justify-between items-center mb-4 shrink-0">
           <div>
             <div className="text-slate-500 text-[10px] uppercase font-bold">Баланс</div>
             <div className="text-3xl font-black text-white"><AnimatedBalance value={player.balance} /></div>
           </div>
-          <button onClick={() => setPlayer(p => ({...p, balance: p.balance + 100}))} className="bg-blue-900/50 text-blue-300 px-3 py-1 rounded-full text-xs font-bold">+100</button>
+          <button 
+            onClick={handleClaimBonus} 
+            className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${canClaimBonus ? 'bg-blue-600 text-white animate-pulse shadow-[0_0_10px_rgba(37,99,235,0.5)]' : 'bg-slate-800 text-slate-500'}`}
+          >
+            {canClaimBonus ? `+${DAILY_BONUS_AMOUNT} ₽` : '🕒'}
+          </button>
       </div>
       <div className="flex-1 flex flex-col items-center justify-center relative min-h-[250px]">
         {/* WIN OVERLAY */}
@@ -604,7 +642,7 @@ const App: React.FC = () => {
         </div>
       </div>
     </div>
-  );
+  )};
 
   const renderLeadersTab = () => (
     <div className="flex flex-col h-full p-4 overflow-y-auto pb-[80px]">
